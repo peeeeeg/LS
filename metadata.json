@@ -1,0 +1,7 @@
+{
+  "name": "LifeStream 智能日历",
+  "description": "一个通过自然语言语音和文本指令组织生活的智能个人日历。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
