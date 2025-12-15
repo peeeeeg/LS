@@ -1,4 +1,4 @@
-// File: C:\AIRL\lifestream-智能日历\app\layout.tsx
+// File: C:\AIRL\lifestream-智能日历 （CN）\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

@@ -1,4 +1,4 @@
-// File: C:\AIRL\lifestream-智能日历\app\page.tsx
+// File: C:\AIRL\lifestream-智能日历 （CN）\app\page.tsx
 import * as entry from '../../../app/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

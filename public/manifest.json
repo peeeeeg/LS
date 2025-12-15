@@ -1,0 +1,29 @@
+{
+  "name": "Lifestream 智能日历",
+  "short_name": "Lifestream",
+  "description": "一个通过自然语言语音和文本指令组织生活的智能个人日历。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/ChatGPT Image 2025年12月16日 00_25_51.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ChatGPT Image 2025年12月16日 00_25_51.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ChatGPT Image 2025年12月16日 00_25_51.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

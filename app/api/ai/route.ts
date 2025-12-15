@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from "@google/genai";
 import { CalendarEvent, EventType, Priority } from "@/types";
 
 const parseEventType = (typeStr: string): EventType => {
@@ -22,13 +21,9 @@ export async function POST(request: Request) {
   try {
     const { transcript, currentEvents, viewDate } = await request.json();
     
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.DEEPSEEK_API_KEY) {
       throw new Error("API Key missing");
     }
-
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY
-    });
 
     // Get real-time context for "today/tomorrow" calculations
     const now = new Date();
@@ -82,22 +77,41 @@ export async function POST(request: Request) {
       {"eventsToAdd": [{"title": "Event Title", "start": "2023-10-27T14:30:00+08:00", "end": "2023-10-27T15:30:00+08:00", "description": "Event Description", "type": "WORK", "priority": "MEDIUM"}], "confirmationMessage": "Confirmation message in user's language"}
     `;
 
-    const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: prompt }] }]
+    // Call DeepSeek API
+    const deepseekResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        response_format: { type: 'json_object' }
+      })
     });
+
+    if (!deepseekResponse.ok) {
+      const errorData = await deepseekResponse.json().catch(() => ({}));
+      throw new Error(`DeepSeek API error: ${errorData.error?.message || deepseekResponse.statusText}`);
+    }
+
+    const result = await deepseekResponse.json();
     
-    // Extract text from the first candidate with proper checking
-    if (!result.candidates || result.candidates.length === 0) {
-      throw new Error("No candidates found in the response");
+    // Extract text from the response
+    if (!result.choices || result.choices.length === 0) {
+      throw new Error("No choices found in the response");
     }
     
-    const firstCandidate = result.candidates[0];
-    if (!firstCandidate.content || !firstCandidate.content.parts || firstCandidate.content.parts.length === 0) {
+    const choice = result.choices[0];
+    if (!choice.message || !choice.message.content) {
       throw new Error("No content found in the response");
     }
     
-    const text = firstCandidate.content.parts[0].text;
+    const text = choice.message.content;
     if (!text) {
       throw new Error("No text found in the response");
     }

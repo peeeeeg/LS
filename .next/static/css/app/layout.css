@@ -689,9 +689,6 @@ video {
 .grid {
   display: grid;
 }
-.contents {
-  display: contents;
-}
 .h-14 {
   height: 3.5rem;
 }
