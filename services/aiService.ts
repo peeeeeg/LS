@@ -14,7 +14,7 @@ export const processUserRequest = async (
       body: JSON.stringify({
         transcript,
         currentEvents,
-        viewDate: viewDate.toISOString()
+        viewDate: new Date(viewDate.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' })).toISOString() // 转换为上海时区
       })
     });
 

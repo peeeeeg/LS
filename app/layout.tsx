@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'LifeStream 智能日历',
-  description: 'AI驱动的智能日历应用，让您的生活更加高效有序',
+  title: 'LifeStream Smart Calendar',
+  description: 'AI-powered smart calendar application',
   themeColor: '#3b82f6',
   appleWebApp: {
     capable: true,

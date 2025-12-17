@@ -1,5 +1,10 @@
 export const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return date.toLocaleTimeString('zh-CN', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: false,
+    timeZone: 'Asia/Shanghai'
+  });
 };
 
 export const getDaysInMonth = (year: number, month: number): Date[] => {

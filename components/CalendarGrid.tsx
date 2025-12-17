@@ -49,7 +49,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return [...prefixDays, ...monthDays];
   }, [currentDate]);
 
-  const monthName = currentDate.toLocaleDateString('zh-CN', { month: 'long', year: 'numeric' });
+  const monthName = currentDate.toLocaleDateString('zh-CN', { 
+    month: 'long', 
+    year: 'numeric',
+    timeZone: 'Asia/Shanghai'
+  });
   const today = new Date();
 
   const handlePrev = () => {
@@ -159,7 +163,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               return (
                 <div key={`header-${day}`} className="sticky top-0 z-30 bg-gray-50 border-b border-r border-gray-100 py-2 md:py-3 text-center h-[60px] flex flex-col items-center justify-center">
                   <span className={`text-xs uppercase font-semibold ${isToday ? 'text-indigo-600' : 'text-gray-500'}`}>
-                    {day.toLocaleDateString('zh-CN', { weekday: 'short' })}
+                    {day.toLocaleDateString('zh-CN', { 
+                      weekday: 'short',
+                      timeZone: 'Asia/Shanghai'
+                    })}
                   </span>
                   <span className={`mt-1 w-6 h-6 md:w-8 md:h-8 flex items-center justify-center rounded-full text-sm md:text-lg font-medium ${isToday ? 'bg-indigo-600 text-white' : 'text-gray-800'}`}>
                     {day.getDate()}
@@ -225,7 +232,13 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                {/* Header for Day View inside scroll area to save external space */}
                <div className="sticky top-0 z-30 bg-gray-50 border-b border-gray-200 p-2 text-center">
                   <span className={`text-base md:text-lg font-semibold ${isSameDay(currentDate, today) ? 'text-indigo-600' : 'text-gray-800'}`}>
-                    {currentDate.toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {currentDate.toLocaleDateString('zh-CN', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      timeZone: 'Asia/Shanghai'
+                    })}
                   </span>
                </div>
 
@@ -237,7 +250,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                    >
                      <div className="w-2 h-2 bg-red-500 rounded-full -ml-1"></div>
                      <span className="text-xs text-red-500 bg-white px-1 ml-1 font-medium">
-                        {today.toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit', hour12: false})}
+                        {today.toLocaleTimeString('zh-CN', { 
+                          hour: '2-digit', 
+                          minute:'2-digit', 
+                          hour12: false,
+                          timeZone: 'Asia/Shanghai'
+                        })}
                      </span>
                    </div>
                 )}

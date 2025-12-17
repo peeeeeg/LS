@@ -268,9 +268,21 @@ const App: React.FC = () => {
                     <span>时间</span>
                  </div>
                  <div className="text-gray-800 text-sm">
-                   {new Date(selectedEvent.start).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 
+                   {new Date(selectedEvent.start).toLocaleString('zh-CN', { 
+                     month: 'short', 
+                     day: 'numeric', 
+                     hour: '2-digit', 
+                     minute: '2-digit', 
+                     hour12: false,
+                     timeZone: 'Asia/Shanghai'
+                   })} 
                    <span className="mx-2 text-gray-400">至</span>
-                   {new Date(selectedEvent.end).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit', hour12: false})}
+                   {new Date(selectedEvent.end).toLocaleTimeString('zh-CN', { 
+                     hour: '2-digit', 
+                     minute:'2-digit', 
+                     hour12: false,
+                     timeZone: 'Asia/Shanghai'
+                   })}
                  </div>
               </div>
               

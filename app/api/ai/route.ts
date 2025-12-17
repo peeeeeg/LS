@@ -27,10 +27,10 @@ export async function POST(request: Request) {
 
     // Get real-time context for "today/tomorrow" calculations
     const now = new Date();
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userTimezone = 'Asia/Shanghai'; // 强制使用上海时区
     // Format: "2023/10/27 14:30:00"
     const userLocalTime = now.toLocaleString('zh-CN', { 
-      timeZone: userTimezone, 
+      timeZone: 'Asia/Shanghai', 
       year: 'numeric', 
       month: 'numeric', 
       day: 'numeric', 
@@ -42,7 +42,11 @@ export async function POST(request: Request) {
     
     // Format the view date (the month the user is looking at) just in case context is needed
     const viewDateObj = new Date(viewDate);
-    const viewDateStr = viewDateObj.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' });
+    const viewDateStr = viewDateObj.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: 'long',
+      timeZone: 'Asia/Shanghai'
+    });
 
     const prompt = `
       You are an intelligent calendar assistant.
