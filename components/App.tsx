@@ -17,6 +17,11 @@ const App: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showMobileAssistant, setShowMobileAssistant] = useState(false);
 
+  // 确保组件挂载时显示当前日期
+  useEffect(() => {
+    setCurrentDate(new Date());
+  }, []);
+
   // Initialize
   useEffect(() => {
     const loaded = loadEvents();

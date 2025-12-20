@@ -88,7 +88,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             const dayEvents = events.filter(e => isSameDay(new Date(e.start), day));
             const isToday = isSameDay(day, today);
             return (
-              <div key={day.toISOString()} className="min-h-[80px] p-1 md:p-2 border-b border-r border-gray-100 hover:bg-gray-50 flex flex-col gap-1 overflow-hidden relative transition-colors">
+              <div 
+                key={day.toISOString()} 
+                className="min-h-[80px] p-1 md:p-2 border-b border-r border-gray-100 hover:bg-gray-50 flex flex-col gap-1 overflow-hidden relative transition-colors cursor-pointer"
+                onDoubleClick={() => {
+                  // 切换到日视图并设置当前日期
+                  onViewModeChange('day');
+                  onMonthChange(day);
+                }}
+              >
                 <div className={`text-xs md:text-sm font-medium w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full mb-1 ${isToday ? 'bg-indigo-600 text-white' : 'text-gray-700'}`}>
                   {day.getDate()}
                 </div>

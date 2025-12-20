@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日期修复测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .test-result {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>日历日期修复测试</h1>
+    
+    <div class="info">
+        <h3>修复说明：</h3>
+        <p>我已在App.tsx组件中添加了一个useEffect钩子，确保在组件挂载时始终显示当前日期。</p>
+        <code>
+            useEffect(() => {
+                setCurrentDate(new Date());
+            }, []);
+        </code>
+    </div>
+    
+    <div class="test-result">
+        <h3>测试步骤：</h3>
+        <ol>
+            <li>点击下方链接打开日历应用</li>
+            <li>检查日历是否显示今天的日期</li>
+            <li>无需刷新页面，应该直接显示正确的日期</li>
+        </ol>
+    </div>
+    
+    <div class="test-result success">
+        <h3>预期结果：</h3>
+        <p>日历应用首次打开时，应该立即显示今天的日期，无需刷新页面。</p>
+    </div>
+    
+    <h3>直接访问日历应用：</h3>
+    <a href="http://localhost:3000" target="_blank">http://localhost:3000</a>
+    
+    <h3>嵌入的日历应用（可能需要点击后才能正常显示）：</h3>
+    <iframe src="http://localhost:3000"></iframe>
+</body>
+</html>
