@@ -34,6 +34,16 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'reminder' | 'system';
+  relatedEventId?: string;
+  isRead: boolean;
+  timestamp: string;
+}
+
 export interface AiResponseSchema {
   eventsToAdd: {
     title: string;
@@ -44,4 +54,12 @@ export interface AiResponseSchema {
     priority: string;
   }[];
   confirmationMessage: string;
+}
+
+export interface ReminderSettings {
+  desktopNotifications: boolean;
+  appNotifications: boolean;
+  emailNotifications: boolean;
+  defaultReminderMinutes: number;
+  reminderSound: boolean;
 }
