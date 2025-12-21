@@ -1,8 +1,11 @@
-import { CalendarEvent, Notification, ReminderSettings } from '../types';
+import { CalendarEvent } from '../types';
+import type { Notification, ReminderSettings } from '../types';
 
-const STORAGE_KEY_EVENTS = 'lifestream_events';
-const STORAGE_KEY_NOTIFICATIONS = 'lifestream_notifications';
-const STORAGE_KEY_REMINDER_SETTINGS = 'lifestream_reminder_settings';
+const STORAGE_KEYS = {
+  EVENTS: 'lifestream_events',
+  NOTIFICATIONS: 'lifestream_notifications',
+  REMINDER_SETTINGS: 'lifestream_reminder_settings'
+};
 
 // Check if we're in the browser environment
 const isBrowser = typeof window !== 'undefined';
@@ -10,7 +13,7 @@ const isBrowser = typeof window !== 'undefined';
 export const saveEvents = (events: CalendarEvent[]) => {
   try {
     if (isBrowser) {
-      localStorage.setItem(STORAGE_KEY_EVENTS, JSON.stringify(events));
+      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
     }
   } catch (e) {
     console.error("Failed to save events", e);
@@ -20,7 +23,7 @@ export const saveEvents = (events: CalendarEvent[]) => {
 export const loadEvents = (): CalendarEvent[] => {
   try {
     if (isBrowser) {
-      const data = localStorage.getItem(STORAGE_KEY_EVENTS);
+      const data = localStorage.getItem(STORAGE_KEYS.EVENTS);
       return data ? JSON.parse(data) : [];
     }
     return [];
@@ -33,7 +36,11 @@ export const loadEvents = (): CalendarEvent[] => {
 export const saveNotifications = (notifications: Notification[]) => {
   try {
     if (isBrowser) {
-      localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(notifications));
+      const serialized = notifications.map(notification => ({
+        ...notification,
+        timestamp: notification.timestamp.toISOString()
+      }));
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(serialized));
     }
   } catch (e) {
     console.error("Failed to save notifications", e);
@@ -43,8 +50,14 @@ export const saveNotifications = (notifications: Notification[]) => {
 export const loadNotifications = (): Notification[] => {
   try {
     if (isBrowser) {
-      const data = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
-      return data ? JSON.parse(data) : [];
+      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      if (data) {
+        const parsed = JSON.parse(data);
+        return parsed.map((notification: any) => ({
+          ...notification,
+          timestamp: new Date(notification.timestamp)
+        }));
+      }
     }
     return [];
   } catch (e) {
@@ -56,7 +69,7 @@ export const loadNotifications = (): Notification[] => {
 export const saveReminderSettings = (settings: ReminderSettings) => {
   try {
     if (isBrowser) {
-      localStorage.setItem(STORAGE_KEY_REMINDER_SETTINGS, JSON.stringify(settings));
+      localStorage.setItem(STORAGE_KEYS.REMINDER_SETTINGS, JSON.stringify(settings));
     }
   } catch (e) {
     console.error("Failed to save reminder settings", e);
@@ -66,28 +79,37 @@ export const saveReminderSettings = (settings: ReminderSettings) => {
 export const loadReminderSettings = (): ReminderSettings => {
   try {
     if (isBrowser) {
-      const data = localStorage.getItem(STORAGE_KEY_REMINDER_SETTINGS);
+      const data = localStorage.getItem(STORAGE_KEYS.REMINDER_SETTINGS);
       if (data) {
         return JSON.parse(data);
       }
     }
-    // Default settings
+    // Return default settings if none exist
     return {
       desktopNotifications: true,
-      appNotifications: true,
-      emailNotifications: false,
+      soundNotifications: true,
       defaultReminderMinutes: 15,
-      reminderSound: true
+      reminderSound: 'default',
+      showReminderHistory: true,
+      maxHistoryItems: 50
     };
   } catch (e) {
     console.error("Failed to load reminder settings", e);
-    // Return default settings on error
+    // Return default settings if there's an error
     return {
       desktopNotifications: true,
-      appNotifications: true,
-      emailNotifications: false,
+      soundNotifications: true,
       defaultReminderMinutes: 15,
-      reminderSound: true
+      reminderSound: 'default',
+      showReminderHistory: true,
+      maxHistoryItems: 50
     };
   }
+};
+
+export const clearOldNotifications = (notifications: Notification[], maxItems: number): Notification[] => {
+  // Sort by timestamp descending (newest first)
+  const sorted = [...notifications].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  // Keep only the newest items
+  return sorted.slice(0, maxItems);
 };

@@ -1,30 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-
-// 生成UUID的辅助函数，兼容服务器端渲染
-const generateUUID = () => {
-  // 检查是否在浏览器环境中
-  if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
-    return window.crypto.randomUUID();
-  }
-  // 服务器端或不支持crypto.randomUUID时的备选方案
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
+import React, { useState, useEffect, useRef } from 'react';
 import { CalendarGrid } from './CalendarGrid';
 import { Assistant } from './Assistant';
-import { CalendarEvent, ChatMessage, CalendarViewMode, Priority, ReminderSettings } from '../types';
-import type { Notification } from '../types';
-import { loadEvents, saveEvents, loadNotifications, saveNotifications, loadReminderSettings, saveReminderSettings } from '../services/storage';
+import { CalendarEvent, ChatMessage, CalendarViewMode, Priority } from '../types';
+import type { Notification, ReminderSettings } from '../types';
+import { loadEvents, saveEvents, loadNotifications, saveNotifications, loadReminderSettings, saveReminderSettings, clearOldNotifications } from '../services/storage';
 import { processUserRequest } from '../services/aiService';
-import { X, Bell, Clock, ChevronsUp, Minus, ChevronsDown, Sparkles, Check, Trash2, Settings, Info } from 'lucide-react';
+import { X, Bell, Clock, ChevronsUp, Minus, ChevronsDown, Sparkles, Settings, CheckCircle, AlertTriangle, Info, Trash2, Filter, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
-  // 基本状态
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
@@ -33,92 +18,81 @@ const App: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showMobileAssistant, setShowMobileAssistant] = useState(false);
   
-  // 通知和提醒设置状态
+  // Reminder System State
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>({
     desktopNotifications: true,
-    appNotifications: true,
-    emailNotifications: false,
+    soundNotifications: true,
     defaultReminderMinutes: 15,
-    reminderSound: true
+    reminderSound: 'default',
+    showReminderHistory: true,
+    maxHistoryItems: 50
   });
-
-  // 确保组件挂载时显示当前日期并初始化数据
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const notificationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Initialize notification sound
   useEffect(() => {
-    setCurrentDate(new Date());
-    
-    try {
-      // 加载事件
-      let loadedEvents: CalendarEvent[] = [];
-      try {
-        loadedEvents = loadEvents();
-      } catch (err) {
-        console.error('Failed to load events:', err);
+    notificationSoundRef.current = new Audio('/notification.mp3');
+    return () => {
+      if (notificationSoundRef.current) {
+        notificationSoundRef.current.pause();
+        notificationSoundRef.current = null;
       }
-      
-      // 数据迁移 - 确保所有事件都有提醒相关字段
-      const migratedEvents = loadedEvents.map(e => ({
-        ...e,
-        reminderEnabled: e.reminderEnabled !== undefined ? e.reminderEnabled : true,
-        reminderMinutes: e.reminderMinutes || 15,
-        notified: e.notified || false,
-        isCompleted: e.isCompleted || false
-      }));
-      
-      setEvents(migratedEvents);
-      
-      // 加载通知
-      try {
-        const loadedNotifications = loadNotifications();
-        setNotifications(loadedNotifications);
-      } catch (err) {
-        console.error('Failed to load notifications:', err);
-      }
-      
-      // 加载提醒设置
-      try {
-        const loadedSettings = loadReminderSettings();
-        setReminderSettings(loadedSettings);
-      } catch (err) {
-        console.error('Failed to load reminder settings:', err);
-      }
-      
-      // 请求通知权限
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-      
-      // 发送初始化通知
-      try {
-        const initNotification: Notification = {
-          id: generateUUID(),
-          title: 'LifeStream 日历已就绪',
-          message: '您的日历已成功加载，所有提醒功能已启用。',
-          type: 'system',
-          isRead: false,
-          timestamp: new Date().toISOString()
-        };
-        
-        const updatedNotifications = [initNotification, ...notifications].slice(0, 50);
-        setNotifications(updatedNotifications);
-        
-        try {
-          saveNotifications(updatedNotifications);
-        } catch (err) {
-          console.error('Failed to save initialization notification:', err);
-        }
-      } catch (err) {
-        console.error('Failed to create initialization notification:', err);
-      }
-      
-    } catch (error) {
-      console.error('Failed to initialize app:', error);
-    }
+    };
   }, []);
 
-  // 数据持久化
+  // 确保组件挂载时显示当前日期
+  useEffect(() => {
+    setCurrentDate(new Date());
+  }, []);
+
+  // Initialize
+  useEffect(() => {
+    // Load events
+    const loadedEvents = loadEvents();
+    // Backward compatibility for old events
+    const migratedEvents = loadedEvents.map(e => ({
+      ...e,
+      reminderEnabled: e.reminderEnabled !== undefined ? e.reminderEnabled : true,
+      reminderMinutes: e.reminderMinutes !== undefined ? e.reminderMinutes : reminderSettings.defaultReminderMinutes,
+      priority: e.priority !== undefined ? e.priority : Priority.MEDIUM
+    }));
+    setEvents(migratedEvents);
+    
+    // Load notifications
+    const loadedNotifications = loadNotifications();
+    setNotifications(loadedNotifications);
+    
+    // Load reminder settings
+    const loadedSettings = loadReminderSettings();
+    setReminderSettings(loadedSettings);
+
+    // Request notification permission with user-friendly timing
+    const requestNotificationPermission = async () => {
+      if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        // Wait a bit before requesting permission for better user experience
+        setTimeout(() => {
+          Notification.requestPermission().then(permission => {
+            if (permission === 'denied') {
+              // Add a system notification about permission being denied
+              addSystemNotification(
+                '提醒功能受限',
+                '桌面通知权限已被拒绝，某些提醒功能可能无法正常工作。您可以在浏览器设置中重新启用通知权限。',
+                'warning'
+              );
+            }
+          });
+        }, 3000);
+      }
+    };
+    
+    requestNotificationPermission();
+  }, []);
+
+  // Persistence
   useEffect(() => {
     saveEvents(events);
   }, [events]);
@@ -131,263 +105,117 @@ const App: React.FC = () => {
     saveReminderSettings(reminderSettings);
   }, [reminderSettings]);
 
-  // 提醒系统 - 带错误处理和重试机制
+  // Helper function to add a new notification
+  const addNotification = (title: string, message: string, type: Notification['type'], relatedEventId?: string) => {
+    const newNotification: Notification = {
+      id: crypto.randomUUID(),
+      title,
+      message,
+      type,
+      relatedEventId,
+      isRead: false,
+      timestamp: new Date(),
+      dismissed: false
+    };
+
+    setNotifications(prev => {
+      const updated = [newNotification, ...prev];
+      // Clear old notifications based on settings
+      if (reminderSettings.maxHistoryItems > 0) {
+        return clearOldNotifications(updated, reminderSettings.maxHistoryItems);
+      }
+      return updated;
+    });
+
+    // Show desktop notification if enabled
+    if (reminderSettings.desktopNotifications && 'Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body: message,
+        icon: '/favicon.ico',
+        tag: relatedEventId || undefined
+      });
+    }
+
+    // Play sound if enabled
+    if (reminderSettings.soundNotifications && notificationSoundRef.current) {
+      notificationSoundRef.current.play().catch(e => {
+        console.error('Failed to play notification sound:', e);
+      });
+    }
+
+    return newNotification.id;
+  };
+
+  // Helper function to add system notifications
+  const addSystemNotification = (title: string, message: string, type: Notification['type'] = 'info') => {
+    return addNotification(title, message, type);
+  };
+
+  // Helper function to play reminder sound
+  const playReminderSound = () => {
+    if (reminderSettings.soundNotifications && notificationSoundRef.current) {
+      notificationSoundRef.current.currentTime = 0;
+      notificationSoundRef.current.play().catch(e => {
+        console.error('Failed to play reminder sound:', e);
+      });
+    }
+  };
+
+  // Enhanced Reminder System
   useEffect(() => {
     const checkReminders = () => {
-      try {
-        const now = new Date();
-        
-        setEvents(prev => prev.map(event => {
-          try {
-            if (!event.reminderEnabled) return event;
+      const now = new Date();
+      const nowMs = now.getTime();
+      
+      setEvents(prevEvents => {
+        return prevEvents.map(event => {
+          if (!event.reminderEnabled || event.notified) return event;
 
-            const eventStart = new Date(event.start);
-            if (isNaN(eventStart.getTime())) {
-              console.error('Invalid event start time:', event.start);
-              return event;
-            }
-
-            const reminderTime = new Date(eventStart.getTime() - event.reminderMinutes * 60 * 1000);
+          const eventStart = new Date(event.start).getTime();
+          const reminderMs = event.reminderMinutes * 60 * 1000;
+          const reminderTime = eventStart - reminderMs;
+          
+          // Check if it's time for the reminder
+          if (nowMs >= reminderTime && nowMs < eventStart) {
+            // Calculate time remaining
+            const minutesRemaining = Math.max(0, Math.round((eventStart - nowMs) / 60000));
             
-            // 重置提醒状态 - 如果事件在未来且提醒时间未到
-            if (eventStart > now && reminderTime > now) {
-              return { ...event, notified: false };
-            }
+            // Add notification
+            addNotification(
+              `日程提醒: ${event.title}`,
+              minutesRemaining > 0 ? `将在 ${minutesRemaining} 分钟后开始。` : '即将开始！',
+              'reminder',
+              event.id
+            );
             
-            // 检查是否需要触发提醒且尚未通知
-            if (!event.notified && now >= reminderTime && now <= eventStart) {
-              // 触发提醒（带重试机制）
-              const triggerWithRetry = async (retries = 3) => {
-                try {
-                  await triggerReminder(event);
-                  return true;
-                } catch (err) {
-                  console.error('Failed to trigger reminder, retrying...', err);
-                  if (retries > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    return triggerWithRetry(retries - 1);
-                  }
-                  throw err;
-                }
-              };
-              
-              triggerWithRetry().catch(err => {
-                console.error('Failed to trigger reminder after retries:', err);
-              });
-              
-              return { ...event, notified: true };
-            }
-          } catch (err) {
-            console.error('Error processing reminder for event:', err, event);
+            // Update event as notified
+            return { ...event, notified: true };
+          }
+          
+          // Reset notification status if event is in the past and has been notified
+          if (nowMs >= eventStart && event.notified) {
+            return { ...event, notified: false };
           }
           
           return event;
-        }));
-      } catch (error) {
-        console.error('Error in reminder check:', error);
-      }
+        });
+      });
     };
 
-    // 更频繁的检查以提高准确性
-    const interval = setInterval(checkReminders, 5000);
+    // Check reminders every minute for better performance
+    notificationIntervalRef.current = setInterval(checkReminders, 60000);
     
-    // 组件挂载或事件变化时的初始检查
+    // Initial check immediately
     checkReminders();
     
-    return () => clearInterval(interval);
-  }, [events]);
-  
-  // 触发提醒函数
-  const triggerReminder = async (event: CalendarEvent): Promise<void> => {
-    try {
-      // 验证事件数据
-      if (!event.title || !event.start) {
-        throw new Error('Invalid event data: missing title or start time');
+    return () => {
+      if (notificationIntervalRef.current) {
+        clearInterval(notificationIntervalRef.current);
+        notificationIntervalRef.current = null;
       }
+    };
+  }, [reminderSettings]);
 
-      const eventStart = new Date(event.start);
-      if (isNaN(eventStart.getTime())) {
-        throw new Error('Invalid event start time format');
-      }
-
-      const timeUntilStart = Math.round((eventStart.getTime() - new Date().getTime()) / 60000);
-      const reminderMessage = event.description || `将在 ${timeUntilStart > 0 ? timeUntilStart : 0} 分钟后开始。`;
-      
-      const notificationPromises: Promise<any>[] = [];
-
-      // 桌面通知
-      if (reminderSettings.desktopNotifications && 'Notification' in window && Notification.permission === 'granted') {
-        const desktopNotificationPromise = new Promise<void>((resolve, reject) => {
-          try {
-            const notification = new Notification(`日程提醒: ${event.title}`, {
-              body: reminderMessage,
-              icon: '/favicon.ico',
-              tag: event.id,
-              requireInteraction: true,
-              data: { eventId: event.id }
-            });
-            notification.onclick = () => {
-              window.focus();
-              notification.close();
-              resolve();
-            };
-            notification.onshow = () => resolve();
-            notification.onerror = (err) => reject(err);
-          } catch (err) {
-            reject(err);
-          }
-        });
-        notificationPromises.push(desktopNotificationPromise);
-      }
-      
-      // 应用内通知
-      if (reminderSettings.appNotifications) {
-        const appNotificationPromise = new Promise<void>((resolve, reject) => {
-          try {
-                    const notification: Notification = {
-                id: generateUUID(),
-                title: event.title,
-                message: reminderMessage,
-                type: 'reminder',
-                relatedEventId: event.id,
-                isRead: false,
-                timestamp: new Date().toISOString()
-              };
-            
-            const newNotifications = [notification, ...notifications];
-            setNotifications(newNotifications);
-            saveNotifications(newNotifications);
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        });
-        notificationPromises.push(appNotificationPromise);
-      }
-      
-      // 邮件通知（占位符，未来实现）
-      if (reminderSettings.emailNotifications) {
-        const emailNotificationPromise = new Promise<void>((resolve) => {
-          console.log('Email notification would be sent for:', event.title);
-          resolve();
-        });
-        notificationPromises.push(emailNotificationPromise);
-      }
-      
-      // 等待所有通知完成
-      await Promise.allSettled(notificationPromises);
-      
-    } catch (error) {
-      console.error('Error triggering reminder:', error);
-      
-      // 添加系统错误通知
-      try {
-        const errorNotification: Notification = {
-          id: generateUUID(),
-          title: '提醒发送失败',
-          message: `无法发送日程 "${event.title || '未知事件'}" 的提醒`,
-          type: 'system',
-          isRead: false,
-          timestamp: new Date().toISOString()
-        };
-        
-        setNotifications(prev => [errorNotification, ...prev]);
-        await saveNotifications([errorNotification, ...notifications]);
-      } catch (err) {
-        console.error('Failed to create error notification:', err);
-      }
-    }
-  };
-
-  // 通知时间格式化
-  const formatNotificationTime = (time: string) => {
-    const date = new Date(time);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
-    if (diffInMinutes < 1) return '刚刚';
-    if (diffInMinutes < 60) return `${diffInMinutes}分钟前`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}小时前`;
-    if (diffInMinutes < 2880) return '昨天';
-    
-    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-  };
-
-  // 通知管理函数
-  const markNotificationAsRead = (id: string) => {
-    try {
-      const updatedNotifications = notifications.map(notification => 
-        notification.id === id ? { ...notification, isRead: true } : notification
-      );
-      setNotifications(updatedNotifications);
-      saveNotifications(updatedNotifications);
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
-    }
-  };
-
-  const markAllNotificationsAsRead = () => {
-    try {
-      const updatedNotifications = notifications.map(notification => ({ ...notification, isRead: true }));
-      setNotifications(updatedNotifications);
-      saveNotifications(updatedNotifications);
-    } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
-    }
-  };
-
-  const deleteNotification = (id: string) => {
-    try {
-      const updatedNotifications = notifications.filter(notification => notification.id !== id);
-      setNotifications(updatedNotifications);
-      saveNotifications(updatedNotifications);
-    } catch (error) {
-      console.error('Failed to delete notification:', error);
-    }
-  };
-
-  const deleteAllNotifications = () => {
-    try {
-      setNotifications([]);
-      saveNotifications([]);
-    } catch (error) {
-      console.error('Failed to delete all notifications:', error);
-    }
-  };
-
-  // 设置管理函数
-  const updateReminderSetting = (key: keyof ReminderSettings, value: any) => {
-    try {
-      const updatedSettings = { ...reminderSettings, [key]: value };
-      setReminderSettings(updatedSettings);
-      saveReminderSettings(updatedSettings);
-      
-      // 添加设置变更通知
-        const newNotification: Notification = {
-          id: crypto.randomUUID(),
-          title: '提醒设置已更新',
-          message: `您已更新了提醒设置: ${key === 'desktopNotifications' ? '桌面通知' : 
-                    key === 'appNotifications' ? '应用内通知' : 
-                    key === 'emailNotifications' ? '邮件通知' : 
-                    key === 'defaultReminderMinutes' ? '默认提醒时间' : 
-                    key === 'reminderSound' ? '提醒音效' : key}`,
-          type: 'system',
-          isRead: false,
-          timestamp: new Date().toISOString()
-        };
-      
-      const updatedNotifications = [newNotification, ...notifications].slice(0, 50);
-      setNotifications(updatedNotifications);
-      saveNotifications(updatedNotifications);
-    } catch (error) {
-      console.error('Failed to update reminder setting:', error);
-    }
-  };
-
-  // 获取未读通知数量
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  // 消息发送处理
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -403,11 +231,11 @@ const App: React.FC = () => {
 
       const createdEvents: CalendarEvent[] = newEventsData.map(e => ({
         ...e,
-        id: generateUUID(),
+        id: crypto.randomUUID(),
         isCompleted: false,
         notified: false,
         reminderEnabled: true,
-        reminderMinutes: 15
+        reminderMinutes: reminderSettings.defaultReminderMinutes
       }));
 
       if (createdEvents.length > 0) {
@@ -436,7 +264,6 @@ const App: React.FC = () => {
     }
   };
 
-  // 事件管理函数
   const handleDeleteEvent = (id: string) => {
     setEvents(prev => prev.filter(e => e.id !== id));
     setSelectedEvent(null);
@@ -453,10 +280,10 @@ const App: React.FC = () => {
 
   const handleToggleReminder = (id: string) => {
     setEvents(prev => prev.map(e => 
-      e.id === id ? { ...e, reminderEnabled: !e.reminderEnabled, notified: false } : e
+      e.id === id ? { ...e, reminderEnabled: !e.reminderEnabled } : e
     ));
     if (selectedEvent && selectedEvent.id === id) {
-      setSelectedEvent(prev => prev ? { ...prev, reminderEnabled: !prev.reminderEnabled, notified: false } : null);
+      setSelectedEvent(prev => prev ? { ...prev, reminderEnabled: !prev.reminderEnabled } : null);
     }
   };
 
@@ -467,6 +294,50 @@ const App: React.FC = () => {
     if (selectedEvent && selectedEvent.id === id) {
       setSelectedEvent(prev => prev ? { ...prev, reminderMinutes: minutes, reminderEnabled: true, notified: false } : null);
     }
+  };
+  
+  // Notification Management Functions
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(notification => 
+      notification.id === id ? { ...notification, isRead: true } : notification
+    ));
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications(prev => prev.map(notification => ({ ...notification, isRead: true })));
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
+  // Settings Management Functions
+  const updateReminderSettings = (newSettings: Partial<ReminderSettings>) => {
+    setReminderSettings(prev => ({ ...prev, ...newSettings }));
+  };
+
+  const resetReminderSettings = () => {
+    setReminderSettings({
+      desktopNotifications: true,
+      soundNotifications: true,
+      defaultReminderMinutes: 15,
+      reminderSound: 'default',
+      showReminderHistory: true,
+      maxHistoryItems: 50
+    });
+    addSystemNotification('提醒设置已重置', '提醒设置已恢复为默认值。', 'success');
+  };
+
+  // UI Panel Control
+  const toggleNotificationPanel = () => setShowNotificationPanel(!showNotificationPanel);
+  const toggleSettingsPanel = () => setShowSettingsPanel(!showSettingsPanel);
+  const closeAllPanels = () => {
+    setShowNotificationPanel(false);
+    setShowSettingsPanel(false);
   };
 
   const REMINDER_OPTIONS = [
@@ -481,282 +352,372 @@ const App: React.FC = () => {
 
   return (
     <div className="relative h-screen w-full bg-gray-100 flex overflow-hidden">
-      {/* 顶部导航栏 */}
-      <header className="px-3 py-2 md:p-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm flex-none z-10">
-        <div>
-          <h1 className="text-lg md:text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-base md:text-lg">LS</span>
-            LifeStream
-          </h1>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {/* 通知中心 */}
-          <div className="relative group">
+      
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-0">
+        <header className="px-4 py-3 md:p-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm flex-none z-10">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-lg">LS</span>
+              LifeStream
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-1.5 rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
+              onClick={toggleNotificationPanel}
+              className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
               aria-label="Notifications"
             >
               <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
+              {notifications.filter(n => !n.isRead && !n.dismissed).length > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
               )}
             </button>
-            
-            {/* 通知下拉菜单 */}
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in duration-200">
-                <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900">通知中心</h3>
-                  <div className="flex gap-2">
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllNotificationsAsRead}
-                        className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                      >
-                        <Check className="w-4 h-4" />
-                        全部已读
-                      </button>
-                    )}
-                    {notifications.length > 0 && (
-                      <button
-                        onClick={deleteAllNotifications}
-                        className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+            <button
+              onClick={toggleSettingsPanel}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+              aria-label="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-hidden p-2 md:p-4">
+          <CalendarGrid 
+            currentDate={currentDate} 
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            events={events}
+            onMonthChange={setCurrentDate}
+            onEventClick={setSelectedEvent}
+            onToggleComplete={handleToggleComplete}
+            onToggleReminder={handleToggleReminder}
+          />
+        </div>
+
+        {/* Mobile Floating Action Button */}
+        <button
+          onClick={() => setShowMobileAssistant(true)}
+          className="md:hidden absolute bottom-6 right-6 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-indigo-700 transition-transform active:scale-95 z-30"
+          aria-label="Open AI Assistant"
+        >
+          <Sparkles className="w-7 h-7" />
+        </button>
+      </div>
+
+      {/* Notification Panel */}
+      <div className={`
+        fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out md:w-96
+        ${showNotificationPanel ? 'translate-x-0' : 'translate-x-full'}
+        ${showNotificationPanel && window.innerWidth < 768 ? 'w-full max-w-none' : ''}
+      `}>
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">通知</h2>
+          <button onClick={closeAllPanels} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-sm text-gray-600">共 {notifications.filter(n => !n.dismissed).length} 条通知</span>
+            <button onClick={markAllNotificationsAsRead} className="text-sm text-indigo-600 hover:underline">
+              全部已读
+            </button>
+          </div>
+          <div className="space-y-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+            {notifications.filter(n => !n.dismissed).length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <Bell className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p>暂无通知</p>
+              </div>
+            ) : (
+              notifications.filter(n => !n.dismissed).map(notification => (
+                <div
+                  key={notification.id}
+                  className={`p-3 rounded-lg border ${notification.isRead ? 'border-gray-100 bg-white' : 'border-indigo-200 bg-indigo-50'}`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {notification.type === 'reminder' && <Clock className="w-4 h-4 text-indigo-600" />}
+                        {notification.type === 'warning' && <AlertTriangle className="w-4 h-4 text-yellow-600" />}
+                        {notification.type === 'success' && <CheckCircle className="w-4 h-4 text-green-600" />}
+                        {notification.type === 'info' && <Info className="w-4 h-4 text-blue-600" />}
+                        <h3 className="font-medium text-gray-900 text-sm">{notification.title}</h3>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">{notification.message}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(notification.timestamp).toLocaleString('zh-CN')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteNotification(notification.id)}
+                      className="text-gray-400 hover:text-gray-600 p-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                
-                <div className="max-h-96 overflow-y-auto pr-2">
-                  {notifications.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                      <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>暂无通知</p>
-                      <p className="text-xs mt-1 opacity-70">您的通知将显示在这里</p>
-                    </div>
-                  ) : (
-                    notifications.map(notification => {
-                      const relatedEvent = notification.relatedEventId 
-                        ? events.find(e => e.id === notification.relatedEventId)
-                        : null;
-                      
-                      return (
-                        <div
-                          key={notification.id}
-                          className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${notification.isRead ? 'text-gray-600' : 'bg-indigo-50 text-gray-900'}`}
-                          onClick={() => {
-                            markNotificationAsRead(notification.id);
-                            if (relatedEvent) {
-                              setSelectedEvent(relatedEvent);
-                              setShowNotifications(false);
-                            }
-                          }}
-                        >
-                          <div className="flex justify-between items-start gap-3">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium truncate">{notification.title}</h4>
-                              <p className="text-sm mt-1 truncate opacity-80">{notification.message}</p>
-                              <div className="text-xs mt-2 text-gray-500 flex items-center gap-2">
-                                <span>{formatNotificationTime(notification.timestamp)}</span>
-                                {notification.type === 'reminder' && (
-                                  <span className="flex items-center gap-1">
-                                    <Bell className="w-3 h-3" />
-                                    提醒
-                                  </span>
-                                )}
-                                {notification.type === 'system' && (
-                                  <span className="flex items-center gap-1">
-                                    <Info className="w-3 h-3" />
-                                    系统
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteNotification(notification.id);
-                              }}
-                              className="text-gray-400 hover:text-gray-600 p-1 opacity-0 hover:opacity-100 transition-opacity"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Settings Panel */}
+      <div className={`
+        fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out md:w-96
+        ${showSettingsPanel ? 'translate-x-0' : 'translate-x-full'}
+        ${showSettingsPanel && window.innerWidth < 768 ? 'w-full max-w-none' : ''}
+      `}>
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">设置</h2>
+          <button onClick={closeAllPanels} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4 space-y-6">
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">提醒设置</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">桌面通知</span>
+                <button
+                  onClick={() => updateReminderSettings({ desktopNotifications: !reminderSettings.desktopNotifications })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${reminderSettings.desktopNotifications ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${reminderSettings.desktopNotifications ? 'translate-x-6' : 'translate-x-1'}`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">声音提醒</span>
+                <button
+                  onClick={() => updateReminderSettings({ soundNotifications: !reminderSettings.soundNotifications })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${reminderSettings.soundNotifications ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${reminderSettings.soundNotifications ? 'translate-x-6' : 'translate-x-1'}`}
+                  />
+                </button>
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">默认提醒时间</span>
+                  <span className="text-sm font-medium text-gray-900">{reminderSettings.defaultReminderMinutes} 分钟</span>
                 </div>
-                
-                {/* 通知统计 */}
-                {notifications.length > 0 && (
-                  <div className="p-3 border-t border-gray-100 bg-gray-50">
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>共 {notifications.length} 条通知</span>
-                      <span>{unreadCount} 条未读</span>
-                    </div>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => updateReminderSettings({ defaultReminderMinutes: Math.max(0, reminderSettings.defaultReminderMinutes - 5) })}
+                    className="p-1 rounded-full border border-gray-200 hover:bg-gray-100"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1440"
+                    step="5"
+                    value={reminderSettings.defaultReminderMinutes}
+                    onChange={(e) => updateReminderSettings({ defaultReminderMinutes: Number(e.target.value) })}
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <button
+                    onClick={() => updateReminderSettings({ defaultReminderMinutes: Math.min(1440, reminderSettings.defaultReminderMinutes + 5) })}
+                    className="p-1 rounded-full border border-gray-200 hover:bg-gray-100"
+                  >
+                    <ChevronsUp className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">历史记录</h3>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">保留通知历史</span>
+              <button
+                onClick={() => updateReminderSettings({ showReminderHistory: !reminderSettings.showReminderHistory })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${reminderSettings.showReminderHistory ? 'bg-indigo-600' : 'bg-gray-200'}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${reminderSettings.showReminderHistory ? 'translate-x-6' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+            {reminderSettings.showReminderHistory && (
+              <div className="mt-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">最大历史数量</span>
+                  <span className="text-sm font-medium text-gray-900">{reminderSettings.maxHistoryItems}</span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="200"
+                  step="10"
+                  value={reminderSettings.maxHistoryItems}
+                  onChange={(e) => updateReminderSettings({ maxHistoryItems: Number(e.target.value) })}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
               </div>
             )}
           </div>
-            
-          {/* 设置按钮 */}
           <button
-            onClick={() => setShowSettings(true)}
-            className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
-            aria-label="Settings"
+            onClick={resetReminderSettings}
+            className="w-full py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
           >
-            <Settings className="w-6 h-6" />
+            重置为默认设置
           </button>
         </div>
-      </header>
-
-      {/* 日历主内容 */}
-      <div className="flex-1 overflow-hidden p-1 md:p-2 sm:p-4">
-        <CalendarGrid 
-          currentDate={currentDate} 
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          events={events}
-          onMonthChange={setCurrentDate}
-          onEventClick={setSelectedEvent}
-          onToggleComplete={handleToggleComplete}
-          onToggleReminder={handleToggleReminder}
-        />
       </div>
 
-      {/* 移动设备浮动按钮 */}
-      <button
-        onClick={() => setShowMobileAssistant(true)}
-        className="md:hidden absolute bottom-6 right-6 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-indigo-700 transition-transform active:scale-95 z-30"
-        aria-label="Open AI Assistant"
-      >
-        <Sparkles className="w-7 h-7" />
-      </button>
-
-      {/* AI助手侧边栏 / 移动抽屉 */}
-      <div className={`
-        fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:static md:bg-transparent md:backdrop-blur-none md:z-auto md:w-96 md:flex-none
-        transition-all duration-300
-        ${showMobileAssistant ? 'opacity-100 visible' : 'opacity-0 invisible md:opacity-100 md:visible'}
-      `}
-      onClick={() => setShowMobileAssistant(false)}
-      >
-        <div 
-          className={`
-            absolute bottom-0 left-0 right-0 h-[80vh] md:h-full md:relative bg-white shadow-2xl rounded-t-2xl md:rounded-none flex flex-col
-            transform transition-transform duration-300 ease-out
-            ${showMobileAssistant ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
-          `}
-          onClick={e => e.stopPropagation()} // 防止点击内部关闭
+      {/* Global Panel Overlay for Notifications and Settings */}
+        <div className={`
+          fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:hidden
+          transition-all duration-300
+          ${showNotificationPanel || showSettingsPanel ? 'opacity-100 visible' : 'opacity-0 invisible'}
+        `}
+        onClick={() => {
+          setShowNotificationPanel(false);
+          setShowSettingsPanel(false);
+        }}
         >
-          <Assistant 
-            messages={messages} 
-            onSendMessage={handleSendMessage} 
-            isProcessing={isProcessing}
-            onClose={() => setShowMobileAssistant(false)}
-          />
         </div>
-      </div>
 
-      {/* 事件详情模态框 */}
+        {/* Assistant Sidebar / Mobile Drawer */}
+        <div className={`
+          fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:static md:bg-transparent md:backdrop-blur-none md:z-auto md:w-96 md:flex-none
+          transition-all duration-300
+          ${showMobileAssistant ? 'opacity-100 visible' : 'opacity-0 invisible md:opacity-100 md:visible'}
+        `}
+        onClick={() => setShowMobileAssistant(false)}
+        >
+          <div 
+            className={`
+              absolute bottom-0 left-0 right-0 h-[80vh] md:h-full md:relative bg-white shadow-2xl rounded-t-2xl md:rounded-none flex flex-col
+              transform transition-transform duration-300 ease-out
+              ${showMobileAssistant ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
+            `}
+            onClick={e => e.stopPropagation()} // Prevent closing when clicking inside
+          >
+            <Assistant 
+              isProcessing={isProcessing} 
+              onSendMessage={handleSendMessage}
+              messages={messages}
+              onClose={() => setShowMobileAssistant(false)}
+            />
+          </div>
+        </div>
+      
+      {/* Event Details Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-2 sm:p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] sm:max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{selectedEvent.title}</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {new Date(selectedEvent.start).toLocaleString('zh-CN', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                    {selectedEvent.end && (
-                      <> - {new Date(selectedEvent.end).toLocaleString('zh-CN', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}</>
-                    )}
-                  </p>
-                </div>
-                <button 
-                  onClick={() => setSelectedEvent(null)}
-                  className="p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setSelectedEvent(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-2"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <div className="flex items-start gap-3 mb-2 pr-8">
+               <button 
+                 onClick={() => handleToggleComplete(selectedEvent.id)}
+                 className={`p-1 mt-1 rounded-full transition-colors flex-shrink-0 ${selectedEvent.isCompleted ? 'text-indigo-600 bg-indigo-50' : 'text-gray-300 hover:text-gray-500'}`}
+               >
+                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedEvent.isCompleted ? 'border-indigo-600' : 'border-current'}`}>
+                   {selectedEvent.isCompleted && <div className="w-3 h-3 bg-indigo-600 rounded-full" />}
+                 </div>
+               </button>
+               <div>
+                 <h2 className={`text-xl font-bold leading-tight ${selectedEvent.isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                   {selectedEvent.title}
+                 </h2>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                     <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600 font-medium">
+                      {selectedEvent.type}
+                     </span>
+                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                       selectedEvent.priority === Priority.HIGH ? 'bg-red-100 text-red-700' :
+                       selectedEvent.priority === Priority.LOW ? 'bg-blue-50 text-blue-600' :
+                       'bg-gray-100 text-gray-600'
+                     }`}>
+                       {selectedEvent.priority === Priority.HIGH && <ChevronsUp className="w-3 h-3" />}
+                       {selectedEvent.priority === Priority.LOW && <ChevronsDown className="w-3 h-3" />}
+                       {selectedEvent.priority === Priority.MEDIUM && <Minus className="w-3 h-3" />}
+                       {selectedEvent.priority === Priority.HIGH ? '高' : selectedEvent.priority === Priority.LOW ? '低' : '中'}
+                     </span>
+                  </div>
+               </div>
+            </div>
+            
+            <div className="space-y-4 mt-6">
+              <div className="flex flex-col gap-1 p-3 bg-gray-50 rounded-lg">
+                 <div className="flex items-center gap-2 text-xs text-gray-500 uppercase font-semibold">
+                    <Clock className="w-3 h-3" />
+                    <span>时间</span>
+                 </div>
+                 <div className="text-gray-800 text-sm">
+                   {new Date(selectedEvent.start).toLocaleString('zh-CN', { 
+                     month: 'short', 
+                     day: 'numeric', 
+                     hour: '2-digit', 
+                     minute: '2-digit', 
+                     hour12: false,
+                     timeZone: 'Asia/Shanghai'
+                   })} 
+                   <span className="mx-2 text-gray-400">至</span>
+                   {new Date(selectedEvent.end).toLocaleTimeString('zh-CN', { 
+                     hour: '2-digit', 
+                     minute:'2-digit', 
+                     hour12: false,
+                     timeZone: 'Asia/Shanghai'
+                   })}
+                 </div>
               </div>
               
-              <div className="space-y-3">
-                {selectedEvent.description && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">描述</h3>
-                    <p className="text-gray-600 leading-relaxed">{selectedEvent.description}</p>
-                  </div>
-                )}
-                
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">状态</h3>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleToggleComplete(selectedEvent.id)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1
-                        ${selectedEvent.isCompleted 
-                          ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                          : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                        }`}
+               <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bell className={`w-4 h-4 ${selectedEvent.reminderEnabled ? 'text-indigo-600' : 'text-gray-400'}`} />
+                      <span className="text-sm font-medium text-gray-700">提醒</span>
+                    </div>
+                    <button
+                      onClick={() => handleToggleReminder(selectedEvent.id)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${selectedEvent.reminderEnabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
                     >
-                      <Check className="w-3 h-3" />
-                      {selectedEvent.isCompleted ? '已完成' : '未完成'}
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${selectedEvent.reminderEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
                     </button>
-                    
-                    <div className="flex-1"></div>
-                    
-                    <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedEvent.reminderEnabled}
-                          onChange={() => handleToggleReminder(selectedEvent.id)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-sm text-gray-700">提醒</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                
-                {selectedEvent.reminderEnabled && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">提醒时间</h3>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-gray-500" />
-                      <select 
-                        value={selectedEvent.reminderMinutes}
-                        onChange={(e) => handleUpdateReminderTime(selectedEvent.id, parseInt(e.target.value))}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                      >
-                        {REMINDER_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
+                 </div>
+                 
+                 {selectedEvent.reminderEnabled && (
+                   <div className="mt-2 pl-6">
+                     <select
+                       value={selectedEvent.reminderMinutes}
+                       onChange={(e) => handleUpdateReminderTime(selectedEvent.id, Number(e.target.value))}
+                       className="w-full bg-white border border-gray-200 text-gray-700 text-sm rounded-md p-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                     >
+                       {REMINDER_OPTIONS.map(opt => (
+                         <option key={opt.value} value={opt.value}>{opt.label}</option>
+                       ))}
+                     </select>
+                   </div>
+                 )}
               </div>
+
+              {selectedEvent.description && (
+                 <div className="flex flex-col gap-1">
+                  <span className="text-xs text-gray-500 uppercase font-semibold">详情</span>
+                  <p className="text-gray-700 text-sm leading-relaxed bg-white border border-gray-100 p-3 rounded-lg max-h-32 overflow-y-auto">
+                    {selectedEvent.description}
+                  </p>
+                </div>
+              )}
               
               <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-2">
                 <button 
@@ -770,151 +731,6 @@ const App: React.FC = () => {
                   className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors text-sm font-medium"
                 >
                   关闭
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 提醒设置模态框 */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-2 sm:p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] sm:max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">提醒设置</h2>
-                  <p className="text-sm text-gray-500 mt-1">自定义您的提醒偏好</p>
-                </div>
-                <button 
-                  onClick={() => setShowSettings(false)}
-                  className="p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {/* 提醒渠道 */}
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">提醒渠道</h3>
-                  <div className="space-y-3">
-                    <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Bell className="w-5 h-5 text-gray-500" />
-                        <div>
-                          <p className="font-medium text-gray-900">桌面通知</p>
-                          <p className="text-xs text-gray-500">在系统托盘显示提醒</p>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox"
-                          checked={reminderSettings.desktopNotifications}
-                          onChange={(e) => updateReminderSetting('desktopNotifications', e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </label>
-                    
-                    <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Bell className="w-5 h-5 text-gray-500" />
-                        <div>
-                          <p className="font-medium text-gray-900">应用内通知</p>
-                          <p className="text-xs text-gray-500">在通知中心显示提醒</p>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox"
-                          checked={reminderSettings.appNotifications}
-                          onChange={(e) => updateReminderSetting('appNotifications', e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </label>
-                    
-                    <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Bell className="w-5 h-5 text-gray-500" />
-                        <div>
-                          <p className="font-medium text-gray-900">邮件通知</p>
-                          <p className="text-xs text-gray-500">通过邮件发送提醒</p>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox"
-                          checked={reminderSettings.emailNotifications}
-                          onChange={(e) => updateReminderSetting('emailNotifications', e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </label>
-                  </div>
-                </div>
-                
-                {/* 默认提醒时间 */}
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">默认提醒时间</h3>
-                  <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-                    <Clock className="w-5 h-5 text-gray-500" />
-                    <select 
-                      value={reminderSettings.defaultReminderMinutes}
-                      onChange={(e) => updateReminderSetting('defaultReminderMinutes', parseInt(e.target.value))}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                    >
-                      {REMINDER_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                
-                {/* 提醒音效 */}
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">提醒音效</h3>
-                  <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                    <div className="flex items-center gap-3">
-                      <Bell className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <p className="font-medium text-gray-900">播放提醒音效</p>
-                        <p className="text-xs text-gray-500">提醒时播放声音</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox"
-                        checked={reminderSettings.reminderSound}
-                        onChange={(e) => updateReminderSetting('reminderSound', e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
-                  </label>
-                </div>
-              </div>
-              
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
-                <button 
-                  onClick={() => setShowSettings(false)}
-                  className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-                >
-                  取消
-                </button>
-                <button 
-                  onClick={() => setShowSettings(false)}
-                  className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors text-sm font-medium"
-                >
-                  保存设置
                 </button>
               </div>
             </div>

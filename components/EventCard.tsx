@@ -81,25 +81,25 @@ export const EventCard: React.FC<EventCardProps> = ({
       }}
       style={style}
       className={`
-        cursor-pointer rounded-md border p-2 sm:p-2.5 mb-1 transition-all hover:shadow-md relative group
+        cursor-pointer rounded-md border p-2 mb-1 transition-all hover:shadow-md relative group
         ${typeColors[event.type]}
         ${(isPast || event.isCompleted) ? 'opacity-60 grayscale' : 'opacity-100'}
-        ${compact ? 'text-xs py-1 px-1.5 truncate' : 'text-sm sm:text-sm'}
+        ${compact ? 'text-xs py-1 px-1.5 truncate' : 'text-sm'}
         ${className || ''}
       `}
     >
-      <div className="flex items-center justify-between gap-1 sm:gap-2">
-          <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {onToggleComplete && (
             <div 
               role="button"
               onClick={handleToggle}
-              className="flex-shrink-0 text-current opacity-70 hover:opacity-100 hover:scale-110 transition-all p-1"
+              className="flex-shrink-0 text-current opacity-70 hover:opacity-100 hover:scale-110 transition-all"
             >
               {event.isCompleted ? (
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-3.5 h-3.5" />
               ) : (
-                <div className="w-4 h-4 rounded-full border-[1.5px] border-current" />
+                <div className="w-3.5 h-3.5 rounded-full border-[1.5px] border-current" />
               )}
             </div>
           )}
@@ -114,18 +114,18 @@ export const EventCard: React.FC<EventCardProps> = ({
           </span>
         </div>
         
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {onToggleReminder && !compact && (
              <div 
                role="button" 
                onClick={handleReminderToggle}
-               className={`transition-opacity ${event.reminderEnabled ? 'opacity-100' : 'opacity-30 hover:opacity-100'} p-1`}
+               className={`transition-opacity ${event.reminderEnabled ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}
                title={event.reminderEnabled ? `提醒: ${getReminderText(event.reminderMinutes)}` : "提醒已关闭"}
              >
-               {event.reminderEnabled ? <Bell className="w-4 h-4 fill-current" /> : <BellOff className="w-4 h-4" />}
+               {event.reminderEnabled ? <Bell className="w-3 h-3 fill-current" /> : <BellOff className="w-3 h-3" />}
              </div>
           )}
-          {event.type === EventType.URGENT && !compact && <AlertCircle className="w-4 h-4 text-red-600 p-1" />}
+          {event.type === EventType.URGENT && !compact && <AlertCircle className="w-3 h-3 text-red-600" />}
         </div>
       </div>
       
