@@ -19,3 +19,56 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 移动端优化 */
+@media (max-width: 640px) {
+  /* 改进移动端触摸体验 */
+  button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* 提高表单元素可点击区域 */
+  input, select, textarea {
+    min-height: 40px;
+  }
+  
+  /* 日历网格响应式调整 */
+  .calendar-grid {
+    font-size: 12px;
+  }
+  
+  /* 滚动条优化 */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  /* 防止文本放大 */
+  * {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+/* 平板设备优化 */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .calendar-grid {
+    font-size: 13px;
+  }
+}
+
+/* 改进滚动体验 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--foreground) var(--background);
+}
+
+/* 改进触摸目标大小 */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

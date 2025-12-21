@@ -1,6 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+
+// 生成UUID的辅助函数，兼容服务器端渲染
+const generateUUID = () => {
+  // 检查是否在浏览器环境中
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  // 服务器端或不支持crypto.randomUUID时的备选方案
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
 import { CalendarGrid } from './CalendarGrid';
 import { Assistant } from './Assistant';
 import { CalendarEvent, ChatMessage, CalendarViewMode, Priority, ReminderSettings } from '../types';
@@ -31,13 +45,10 @@ const App: React.FC = () => {
     reminderSound: true
   });
 
-  // 确保组件挂载时显示当前日期
+  // 确保组件挂载时显示当前日期并初始化数据
   useEffect(() => {
     setCurrentDate(new Date());
-  }, []);
-
-  // 初始化 - 加载数据和设置
-  useEffect(() => {
+    
     try {
       // 加载事件
       let loadedEvents: CalendarEvent[] = [];
@@ -82,7 +93,7 @@ const App: React.FC = () => {
       // 发送初始化通知
       try {
         const initNotification: Notification = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           title: 'LifeStream 日历已就绪',
           message: '您的日历已成功加载，所有提醒功能已启用。',
           type: 'system',
@@ -234,7 +245,7 @@ const App: React.FC = () => {
         const appNotificationPromise = new Promise<void>((resolve, reject) => {
           try {
                     const notification: Notification = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 title: event.title,
                 message: reminderMessage,
                 type: 'reminder',
@@ -272,7 +283,7 @@ const App: React.FC = () => {
       // 添加系统错误通知
       try {
         const errorNotification: Notification = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           title: '提醒发送失败',
           message: `无法发送日程 "${event.title || '未知事件'}" 的提醒`,
           type: 'system',
@@ -392,7 +403,7 @@ const App: React.FC = () => {
 
       const createdEvents: CalendarEvent[] = newEventsData.map(e => ({
         ...e,
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         isCompleted: false,
         notified: false,
         reminderEnabled: true,
@@ -471,23 +482,23 @@ const App: React.FC = () => {
   return (
     <div className="relative h-screen w-full bg-gray-100 flex overflow-hidden">
       {/* 顶部导航栏 */}
-      <header className="px-4 py-3 md:p-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm flex-none z-10">
+      <header className="px-3 py-2 md:p-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm flex-none z-10">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-lg">LS</span>
+          <h1 className="text-lg md:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-base md:text-lg">LS</span>
             LifeStream
           </h1>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* 通知中心 */}
           <div className="relative group">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
+              className="relative p-1.5 rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
               aria-label="Notifications"
             >
-              <Bell className="w-6 h-6" />
+              <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {unreadCount > 99 ? '99+' : unreadCount}
@@ -607,7 +618,7 @@ const App: React.FC = () => {
       </header>
 
       {/* 日历主内容 */}
-      <div className="flex-1 overflow-hidden p-2 md:p-4">
+      <div className="flex-1 overflow-hidden p-1 md:p-2 sm:p-4">
         <CalendarGrid 
           currentDate={currentDate} 
           viewMode={viewMode}
@@ -656,8 +667,8 @@ const App: React.FC = () => {
 
       {/* 事件详情模态框 */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-2 sm:p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] sm:max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -768,8 +779,8 @@ const App: React.FC = () => {
 
       {/* 提醒设置模态框 */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-2 sm:p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] sm:max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>

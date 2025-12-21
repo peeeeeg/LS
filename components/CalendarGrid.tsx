@@ -84,13 +84,13 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         </div>
         <div className="grid grid-cols-7 flex-1 auto-rows-fr overflow-y-auto bg-white">
           {monthViewDays.map((day, index) => {
-            if (!day) return <div key={`empty-${index}`} className="bg-gray-50/30 border-b border-r border-gray-100 min-h-[80px]" />;
+            if (!day) return <div key={`empty-${index}`} className="bg-gray-50/30 border-b border-r border-gray-100 min-h-[60px] sm:min-h-[80px]" />;
             const dayEvents = events.filter(e => isSameDay(new Date(e.start), day));
             const isToday = isSameDay(day, today);
             return (
               <div 
                 key={day.toISOString()} 
-                className="min-h-[80px] p-1 md:p-2 border-b border-r border-gray-100 hover:bg-gray-50 flex flex-col gap-1 overflow-hidden relative transition-colors cursor-pointer"
+                className="min-h-[60px] sm:min-h-[80px] p-1 md:p-2 border-b border-r border-gray-100 hover:bg-gray-50 flex flex-col gap-1 overflow-hidden relative transition-colors cursor-pointer"
                 onDoubleClick={() => {
                   // 切换到日视图并设置当前日期
                   onViewModeChange('day');

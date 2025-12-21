@@ -14,9 +14,13 @@ export const Assistant: React.FC<AssistantProps> = ({ isProcessing, onSendMessag
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    setIsMounted(true);
+    
+    // 只在客户端环境初始化语音识别
+    if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = false;
@@ -46,11 +50,14 @@ export const Assistant: React.FC<AssistantProps> = ({ isProcessing, onSendMessag
   }, [messages]);
 
   const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-    } else {
-      setIsListening(true);
-      recognitionRef.current?.start();
+    // 只在客户端环境且语音识别可用时执行
+    if (typeof window !== 'undefined' && recognitionRef.current) {
+      if (isListening) {
+        recognitionRef.current?.stop();
+      } else {
+        setIsListening(true);
+        recognitionRef.current?.start();
+      }
     }
   };
 
@@ -108,18 +115,18 @@ export const Assistant: React.FC<AssistantProps> = ({ isProcessing, onSendMessag
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-white border-t border-gray-200 flex-none pb-safe">
-        <div className="flex items-center gap-2">
+      <div className="p-3 bg-white border-t border-gray-200 flex-none pb-safe">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={toggleListening}
-            className={`p-3 rounded-full transition-colors flex-shrink-0 ${
+            className={`p-1.5 rounded-full transition-colors flex-shrink-0 ${
               isListening
                 ? 'bg-red-100 text-red-600 animate-pulse'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
             title="语音输入 (中文)"
           >
-            {isListening ? <StopCircle className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isListening ? <StopCircle className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
           <div className="flex-1 relative">
             <input
@@ -127,17 +134,17 @@ export const Assistant: React.FC<AssistantProps> = ({ isProcessing, onSendMessag
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
-              placeholder="输入..."
-              className="w-full pl-4 pr-10 py-3 bg-gray-100 border-none rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="输入或点击麦克风按钮说话..."
+              className="w-full pl-4 pr-10 py-1.5 bg-gray-100 border-none rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
               disabled={isProcessing || isListening}
             />
           </div>
           <button
             onClick={() => handleSend(input)}
             disabled={!input.trim() || isProcessing}
-            className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 transition-colors flex-shrink-0"
+            className="p-1.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 transition-colors flex-shrink-0"
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-4 h-4" />
           </button>
         </div>
       </div>
