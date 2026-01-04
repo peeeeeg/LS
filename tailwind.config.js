@@ -11,6 +11,10 @@ module.exports = {
         background: 'var(--background)',
         foreground: 'var(--foreground)',
       },
+      screens: {
+        // 横屏模式媒体查询
+        landscape: {'raw': '(orientation: landscape)'},
+      },
     },
   },
   plugins: [],
