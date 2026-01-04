@@ -1,6 +1,8 @@
+'use client';
+
 import React, { useMemo, useRef, useEffect } from 'react';
 import { CalendarEvent, CalendarViewMode } from '../types';
-import { getDaysInMonth, getWeekDays, isSameDay } from '../utils/dateUtils';
+import { getDaysInMonth, getWeekDays, isSameDay, getHoliday, getHolidayStyleClass } from '../utils/dateUtils';
 import { EventCard } from './EventCard';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -88,18 +90,17 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             const dayEvents = events.filter(e => isSameDay(new Date(e.start), day));
             const isToday = isSameDay(day, today);
             return (
-              <div 
-                key={day.toISOString()} 
-                className="min-h-[80px] p-1 md:p-2 border-b border-r border-gray-100 hover:bg-gray-50 flex flex-col gap-1 overflow-hidden relative transition-colors cursor-pointer"
-                onDoubleClick={() => {
-                  // 切换到日视图并设置当前日期
-                  onViewModeChange('day');
-                  onMonthChange(day);
-                }}
-              >
-                <div className={`text-xs md:text-sm font-medium w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full mb-1 ${isToday ? 'bg-indigo-600 text-white' : 'text-gray-700'}`}>
-                  {day.getDate()}
-                </div>
+              <div key={day.toISOString()} className="min-h-[80px] p-1 md:p-2 border-b border-r border-gray-100 hover:bg-gray-50 flex flex-col gap-1 overflow-hidden relative transition-colors">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={`text-xs md:text-sm font-medium w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white' : getHolidayStyleClass(day)}`}>
+                      {day.getDate()}
+                    </div>
+                    {getHoliday(day) && (
+                      <div className="text-[10px] md:text-xs truncate text-red-600 font-medium">
+                        {getHoliday(day)?.name}
+                      </div>
+                    )}
+                  </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
                   {dayEvents.map(event => (
                     <EventCard 
@@ -168,17 +169,23 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             {/* Header Row (Sticky Top) */}
             {weekDays.map(day => {
               const isToday = isSameDay(day, today);
+              const holiday = getHoliday(day);
               return (
                 <div key={`header-${day}`} className="sticky top-0 z-30 bg-gray-50 border-b border-r border-gray-100 py-2 md:py-3 text-center h-[60px] flex flex-col items-center justify-center">
-                  <span className={`text-xs uppercase font-semibold ${isToday ? 'text-indigo-600' : 'text-gray-500'}`}>
+                  <span className={`text-xs uppercase font-semibold ${isToday ? 'text-indigo-600' : getHolidayStyleClass(day)}`}>
                     {day.toLocaleDateString('zh-CN', { 
                       weekday: 'short',
                       timeZone: 'Asia/Shanghai'
                     })}
                   </span>
-                  <span className={`mt-1 w-6 h-6 md:w-8 md:h-8 flex items-center justify-center rounded-full text-sm md:text-lg font-medium ${isToday ? 'bg-indigo-600 text-white' : 'text-gray-800'}`}>
+                  <span className={`mt-1 w-6 h-6 md:w-8 md:h-8 flex items-center justify-center rounded-full text-sm md:text-lg font-medium ${isToday ? 'bg-indigo-600 text-white' : getHolidayStyleClass(day)}`}>
                     {day.getDate()}
                   </span>
+                  {holiday && (
+                    <span className="text-[9px] md:text-xs truncate text-red-600 font-medium mt-0.5">
+                      {holiday.name}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -239,15 +246,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             <div className="flex-1 relative bg-white">
                {/* Header for Day View inside scroll area to save external space */}
                <div className="sticky top-0 z-30 bg-gray-50 border-b border-gray-200 p-2 text-center">
-                  <span className={`text-base md:text-lg font-semibold ${isSameDay(currentDate, today) ? 'text-indigo-600' : 'text-gray-800'}`}>
-                    {currentDate.toLocaleDateString('zh-CN', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      timeZone: 'Asia/Shanghai'
-                    })}
-                  </span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className={`text-base md:text-lg font-semibold ${isSameDay(currentDate, today) ? 'text-indigo-600' : getHolidayStyleClass(currentDate)}`}>
+                      {currentDate.toLocaleDateString('zh-CN', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        timeZone: 'Asia/Shanghai'
+                      })}
+                    </span>
+                    {getHoliday(currentDate) && (
+                      <span className="text-xs truncate text-red-600 font-medium">
+                        {getHoliday(currentDate)?.name}
+                      </span>
+                    )}
+                  </div>
                </div>
 
                {/* Current time line */}

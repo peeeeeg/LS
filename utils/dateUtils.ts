@@ -41,3 +41,11 @@ export const isSameDay = (d1: Date, d2: Date): boolean => {
          d1.getMonth() === d2.getMonth() &&
          d1.getDate() === d2.getDate();
 };
+
+// 从holidayUtils重新导出节假日相关函数
+export { 
+  getHoliday, 
+  isHoliday, 
+  isWorkDayOff, 
+  getHolidayStyleClass 
+} from './holidayUtils';

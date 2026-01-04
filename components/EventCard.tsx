@@ -21,6 +21,20 @@ const typeColors: Record<EventType, string> = {
   [EventType.OTHER]: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
+const typeLabels: Record<EventType, string> = {
+  [EventType.WORK]: '工作',
+  [EventType.PERSONAL]: '个人',
+  [EventType.URGENT]: '紧急',
+  [EventType.OTHER]: '其他',
+};
+
+const typeIcons: Record<EventType, string> = {
+  [EventType.WORK]: '💼',
+  [EventType.PERSONAL]: '👤',
+  [EventType.URGENT]: '⚠️',
+  [EventType.OTHER]: '📌',
+};
+
 const getReminderText = (minutes: number) => {
   if (minutes === 0) return "事件开始时";
   if (minutes < 60) return `提前 ${minutes} 分钟`;
@@ -110,12 +124,13 @@ export const EventCard: React.FC<EventCardProps> = ({
             {(timeFormat === 'start' || timeFormat === 'range') && (
               <span className="font-normal opacity-80 mr-1">{formatTime(start)}</span>
             )}
+            <span className="font-normal mr-1">{compact ? typeIcons[event.type] : typeLabels[event.type]}</span>
             {event.title}
           </span>
         </div>
         
         <div className="flex items-center gap-1 flex-shrink-0">
-          {onToggleReminder && !compact && (
+          {onToggleReminder && (
              <div 
                role="button" 
                onClick={handleReminderToggle}
@@ -125,7 +140,7 @@ export const EventCard: React.FC<EventCardProps> = ({
                {event.reminderEnabled ? <Bell className="w-3 h-3 fill-current" /> : <BellOff className="w-3 h-3" />}
              </div>
           )}
-          {event.type === EventType.URGENT && !compact && <AlertCircle className="w-3 h-3 text-red-600" />}
+          {event.type === EventType.URGENT && <AlertCircle className="w-3 h-3 text-red-600" />}
         </div>
       </div>
       

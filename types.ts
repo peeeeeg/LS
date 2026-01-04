@@ -45,23 +45,3 @@ export interface AiResponseSchema {
   }[];
   confirmationMessage: string;
 }
-
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'reminder' | 'system' | 'info' | 'success' | 'warning' | 'error';
-  relatedEventId?: string;
-  isRead: boolean;
-  timestamp: Date;
-  dismissed: boolean;
-}
-
-export interface ReminderSettings {
-  desktopNotifications: boolean;
-  soundNotifications: boolean;
-  defaultReminderMinutes: number;
-  reminderSound: string;
-  showReminderHistory: boolean;
-  maxHistoryItems: number;
-}
